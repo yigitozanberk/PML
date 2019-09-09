@@ -127,4 +127,171 @@ accuracy = 0.459 + 0.292 = 0.751.
 
 our algorithm is 75% accurate in this particular case.
 
+## Relative order of importance
+
+question > data > features > algorithms
+
+(image and voice data can require a certain kind of prediction algorithms.)
+
+the combination of some data and an aching desire for an answer does not ensure that a reasonable answer can be extracted from a given body of data.
+- tukey
+
+garbage in = garbage out
+
+if you have bad data, no matter how good your algorithm is you'll get bad results
+
+question -> *input data* -> features -> algorithm -> parameters -> evaluation
+
+1. may be easy (movie ratings -> new movie ratings)
+2. may be harder (gene expression data -> disease)
+3. depends on what is a 'good prediction'.
+4. often more data > better models
+5. the most important step - collecting the right data.
+
+question -> input data -> *features* -> algorithm -> parameters -> evaluation
+features matter.
+
+Properties of good features
+- lead to data compression(without losing meaningful details while compressing dimensions)
+- retain relevant information
+- are created based on expert application knowledge
+
+common mistakes
+- trying to automate feature selection(blackbox predictions can be very useful and accurate, but they can change in a dime if you don't know *how* those features predict outcomes)
+- not paying attention to data-specific quirks(outliers, specific weird features)
+- throwing away information unnecessarily
+
+feature selection automation is a field itself(image processing) - deep learning
+
+question -> input data -> features -> *algorithm* -> parameters -> evaluation
+
+algorithms matter less than you think. so it seems like using the same method over and over again did make the prediction error worse but not incredibly worse.
+Using a very sensible approach will get you a very large weight of solving the problem. getting the absolute best method can *improve* that result.
+
+Issues to Consider:
+the "best" machine learning method
+- interpretable
+- simple
+- accurate
+- fast(to train and test)
+- scalable (easy to apply to a large data set. fast or parallelizable)
+
+## Prediction is about accuracy tradeoffs
+
+- interpretability versus accuracy
+- speed versus accuracy
+- simplicity versus accuracy
+- scalability versus accuracy
+
+interpretability matters
+'if' total cholesterol >= 160 'and' smoke 'then' 10 year CHD risk >= 5%
+'else if' smoke 'and' systolic blood pressure >= 140 'then' 10 year CHD risk >= 5%
+'else' 10 year CHD risk < 5%
+
+Scalability matters
+the netflix challenge algorithm did not scale well. long time to compute the huge datasets of netflix. accuracy isn't only the best and only decision maker.
+
+# in and out of sample errors
+
+in sample error: the error rate you get on the same data set you used to build your predictor. sometimes called resubstitution error.
+
+out of sample error : the error rate you get on a new data set. sometimes called generalization error.
+
+Key ideas:
+1. out of sample error is what you care about
+2. in sample error < out of sample error
+3. the reason is overfitting.
+- matching your algorithm to the data you have.
+
+sometimes your machine learning algorithm will tune itself to the noise in your training data set.
+
+```{r}
+library(kernlab); data(spam); set.seed(333)
+smallSpam <- spam[sample(dim(spam)[1], size = 10), ]
+#10 messages
+spamLabel <- (smallSpam$type == "spam")*1 + 1
+#whether you see a lot of capital letters
+plot(smallSpam$capitalAve, col = spamLabel)
+```
+
+some of the spam messages have a lot more capital letters.
+
+
+so you might want to build a predictor based on the average number of capital letters as to whether you are a spam message or you're a ham message.
+
+### rule1
+capitalAve > 2.7 = "spam"
+capitalAve <2.40 = "nonspam"
+capitalAve between 2.40 and 2.45 = "spam"
+capitalAve between 2.45 and 2.7 = "nonspam"
+
+we can do the last two lines to perfectly tune the algorithm to predict those two spam values in the training set as well. This makes training set accuracy perfect
+
+```{r}
+rule1 <- function(x) {
+        prediction <- rep(NA, length(x))
+        prediction[x > 2.7] <- "spam"
+        prediction[x <2.40] <- "nonspam"
+        prediction[(x >= 2.40 & x <= 2.45)] <- "spam"
+        prediction[(x > 2.45 & x <= 2.70)] <- "nonspam"
+        return(prediction)
+}
+table(rule1(smallSpam$capitalAve), smallSpam$type)
+```
+
+### rule2
+
+capitalAve > 2.80 = "spam"
+capitalAve <= 2.80 = "nonspam"
+
+```{r}
+rule2 <- function(x) {
+        prediction <- rep(NA, length(x))
+        prediction[x > 2.80] <- "spam"
+        prediction[x <= 2.80] <- "nonspam"
+        return(prediction)
+}
+table(rule2(smallSpam$capitalAve), smallSpam$type)
+```
+
+apply to all data
+
+```{r}
+table(rule1(spam$capitalAve),spam$type)
+table(rule2(spam$capitalAve),spam$type)
+mean(rule1(spam$capitalAve)==spam$type)
+mean(rule2(spam$capitalAve)==spam$type)
+```
+
+
+
+## Look at accuracy
+
+```{r, dependson="loadData"}
+sum(rule1(spam$capitalAve)==spam$type)
+sum(rule2(spam$capitalAve)==spam$type)
+#number of times we were right
+# 30 more right answers for the simplified rule.
+```
+
+
+---
+
+## What's going on? 
+
+<center><rt> Overfitting </rt></center>
+
+* Data have two parts
+  * Signal
+  * Noise
+* The goal of a predictor is to find signal (and ignore the noise) !!!!!!!!!!!
+* You can always design a perfect in-sample predictor
+* You capture both signal + noise when you do that
+* Predictor won't perform as well on new samples
+
+[http://en.wikipedia.org/wiki/Overfitting](http://en.wikipedia.org/wiki/Overfitting)
+
+
+
+
 
