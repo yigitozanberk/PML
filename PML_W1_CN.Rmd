@@ -1,0 +1,130 @@
+---
+title: "Practicle Machine Learning Week 1"
+author: "Yigit Ozan Berk"
+date: "9/9/2019"
+output: html_document
+---
+
+Chris Volinsky - team that won the netflix prize - reducing the error when netflix is predicting which movies the customer wants most
+
+Kaggle hosts competitions.
+
+# Class Syllabus
+Prediction study design
+
+In sample and out of sample errors
+
+Overfitting
+
+Receiver Operating Characteristic (ROC) curves
+
+The caret package in R
+
+Preprocessing and feature creation
+
+Prediction with regression
+
+Prediction with decision trees
+
+Prediction with random forests
+
+Boosting
+
+Prediction blending
+
+
+# Week 1
+
+- Study design 
+training vs. test sets
+- Conceptual issues - out of sample error, ROC curves
+- Practicle implementation - the caret package
+
+```{r}
+install.packages("caret")
+```
+
+## A useful (if a bit advanced) book
+
+<img class=center src=../../assets/img/08_PredictionAndMachineLearning/elemlearn.png height=350>
+
+
+[The elements of statistical learning](http://statweb.stanford.edu/~tibs/ElemStatLearn/)
+
+---
+
+## A useful package
+
+<img class=center src=../../assets/img/08_PredictionAndMachineLearning/caret.png height=350>
+
+
+[http://caret.r-forge.r-project.org/](http://caret.r-forge.r-project.org/)
+
+
+---
+
+## Machine learning (more advanced material)
+
+<img class=center src=../../assets/img/08_PredictionAndMachineLearning/machinelearning.png height=350>
+
+
+[https://www.coursera.org/course/ml](https://www.coursera.org/course/ml)
+
+
+---
+
+## Even more resources
+
+* [List of machine learning resources on Quora](http://www.quora.com/Machine-Learning/What-are-some-good-resources-for-learning-about-machine-learning-Why)
+* [List of machine learning resources from Science](http://www.sciencemag.org/site/feature/data/compsci/machine_learning.xhtml)
+* [Advanced notes from MIT open courseware](http://ocw.mit.edu/courses/electrical-engineering-and-computer-science/6-867-machine-learning-fall-2006/lecture-notes/)
+* [Advanced notes from CMU](http://www.stat.cmu.edu/~cshalizi/350/)
+* [Kaggle - machine learning competitions](http://www.kaggle.com/)
+
+# What is prediction?
+
+question > input data > features > algorithm > parameters > evaluation
+
+```{r}
+install.packages("kernlab")
+library(kernlab)
+```
+
+count the number of times the email says "you". Divide it to the total number of words. Now you have a quantitative variable of the percentage of words that are "you" in an email.
+
+
+```{r}
+data(spam)
+head(spam)
+```
+
+```{r}
+plot(density(spam$your[spam$type == "nonspam"]),
+     col = "blue", main = "", xlab = "Frequency of 'your")
+lines(density(spam$your[spam$type == "spam"]), col = "red")
+```
+
+the number of "your" is much higher in spam emails.
+
+find a cutoff value of frequency of "your"
+
+frequency of 'your' > spam
+
+```{r}
+plot(density(spam$your[spam$type == "nonspam"]),
+     col = "blue", main = "", xlab = "Frequency of 'your")
+lines(density(spam$your[spam$type == "spam"]), col = "red")
+abline(v = 0.5, col = "black")
+```
+
+```{r}
+prediction <- ifelse(spam$your > 0.5, "spam", "nonspam")
+#if the freq is above 0.5 mark as spam.. versus the real values table.
+table(prediction, spam$type)/length(spam$type)
+```
+
+accuracy = 0.459 + 0.292 = 0.751.
+
+our algorithm is 75% accurate in this particular case.
+
+
