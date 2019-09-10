@@ -292,6 +292,24 @@ sum(rule2(spam$capitalAve)==spam$type)
 [http://en.wikipedia.org/wiki/Overfitting](http://en.wikipedia.org/wiki/Overfitting)
 
 
+## Prediction Study Design
+
+*How to minimize the problems that can be cause by in sample vs out of sample errors.*
+
+1. Define your error rate(multiple error rates you can choose)
+2. Split data into:
+- training, testing, validation(optional)
+3. on the training set pick features
+- use cross validation
+4. on the training set pick prediction function
+- use cross validation
+5. if no validation
+- apply 1x to test set(if you apply more than once, you are using the test set as the training set too)(apply only the best prediction model)
+6. if validation(if you have validation sets, you can apply more than one prediction alternatives to the test set)
+- apply to test set and refine
+- apply 1x to validation(apply only the best prediction model)
+
+
 
 
 
