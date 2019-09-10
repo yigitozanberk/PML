@@ -1,0 +1,510 @@
+---
+title: "Practicle Machine Learning Week 2 Class Notes"
+author: "Yigit Ozan Berk"
+date: "9/10/2019"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# The caret package
+
+
+## The caret R package
+
+<img class=center src=../../assets/img/08_PredictionAndMachineLearning/caret.png height=400>
+
+[http://caret.r-forge.r-project.org/](http://caret.r-forge.r-project.org/)
+
+
+---
+
+## Caret functionality
+
+* Some preprocessing (cleaning)
+  * preProcess()
+* Data splitting
+  * createDataPartition()
+  * createResample()
+  * createTimeSlices()
+* Training/testing functions
+  * train()
+  * predict()
+* Model comparison
+  * confusionMatrix()
+
+---
+
+## Machine learning algorithms in R
+
+* Linear discriminant analysis(MASS package)
+* Regression (stats package) 
+* Naive Bayes
+* Support vector machines
+* Classification and regression trees
+* Random forests
+* Boosting
+* etc. 
+
+gbm (gbm package)
+mda (mda package)
+rpart (rpart package)
+Weka (RWeka package)
+LogitBoost (caTools package)
+
+---
+
+## Why caret? 
+
+<img class=center src=../../assets/img/08_PredictionAndMachineLearning/predicttable.png height=250>
+
+[add link](??)
+
+
+--- 
+
+## SPAM Example: Data splitting
+
+```{r loadPackage}
+library(caret); library(kernlab); data(spam)
+inTrain <- createDataPartition(y=spam$type,
+                              p=0.75, list=FALSE)
+#75 % to train and 25% to test
+training <- spam[inTrain,]
+testing <- spam[-inTrain,]
+dim(training)
+```
+
+
+--- 
+
+## SPAM Example: Fit a model
+
+```{r training, dependson="loadPackage",cache=TRUE}
+set.seed(32343)
+modelFit <- train(type ~.,data=training, method="glm")
+modelFit
+```
+
+
+--- 
+
+## SPAM Example: Final model
+
+```{r finalModel, dependson="training",cache=TRUE}
+modelFit <- train(type ~.,data=training, method="glm")
+modelFit$finalModel
+```
+
+
+--- 
+
+## SPAM Example: Prediction
+
+```{r predictions, dependson="training",cache=TRUE}
+predictions <- predict(modelFit,newdata=testing)
+predictions
+```
+
+--- 
+
+## SPAM Example: Confusion Matrix
+
+```{r confusion, dependson="predictions",cache=TRUE}
+confusionMatrix(predictions,testing$type)
+```
+
+---
+
+## Further information
+
+* Caret tutorials:
+  * [http://www.edii.uclm.es/~useR-2013/Tutorials/kuhn/user_caret_2up.pdf](http://www.edii.uclm.es/~useR-2013/Tutorials/kuhn/user_caret_2up.pdf)
+  * [http://cran.r-project.org/web/packages/caret/vignettes/caret.pdf](http://cran.r-project.org/web/packages/caret/vignettes/caret.pdf)
+* A paper introducing the caret package
+  * [http://www.jstatsoft.org/v28/i05/paper](http://www.jstatsoft.org/v28/i05/paper)
+  
+
+
+# Data Slicing
+
+
+
+## SPAM Example: Data splitting
+
+```{r loadPackage}
+library(caret); library(kernlab); data(spam)
+inTrain <- createDataPartition(y=spam$type,
+                              p=0.75, list=FALSE)
+# 75 % for training set, 25% for test set
+training <- spam[inTrain,]
+testing <- spam[-inTrain,]
+dim(training)
+```
+
+---
+
+## SPAM Example: K-fold
+
+```{r kfold,dependson="loadPackage"}
+# for cross validation
+set.seed(32323)
+folds <- createFolds(y=spam$type,k=10,
+                             list=TRUE,returnTrain=TRUE)
+#list = T means it will return each set of imbecies corresponding to a particular fold as a list. 
+# returnTrain = T to return the training set
+sapply(folds,length)
+folds[[1]][1:10] #doesn't change the arrangement of the data
+```
+
+---
+
+## SPAM Example: Return test
+
+```{r kfoldtest,dependson="loadPackage"}
+set.seed(32323)
+folds <- createFolds(y=spam$type,k=10,
+                             list=TRUE,returnTrain=FALSE)
+# to return the test set
+sapply(folds,length)
+folds[[1]][1:10] #for looking at the id of the sample
+```
+
+---
+
+## SPAM Example: Resampling
+
+```{r resample,dependson="loadPackage"}
+set.seed(32323)
+folds <- createResample(y=spam$type,times=10,
+                             list=TRUE)
+#for resampling or bootstrapping
+
+sapply(folds,length)
+folds[[1]][1:10]
+#since we're doing resampling with replacement, you can get the same value multiple times
+```
+
+---
+
+## SPAM Example: Time Slices
+
+```{r time,dependson="loadPackage"}
+set.seed(32323)
+tme <- 1:1000
+folds <- createTimeSlices(y=tme,initialWindow=20,
+                          horizon=10)
+# initialWindow = 20 == window of 20 samples in them
+# horizon = 10 == i'm going to predict the next 10 samples after taking the initial window of 20 values
+names(folds)
+folds$train[[1]]
+folds$test[[1]]
+```
+
+
+---
+
+## Further information
+
+* Caret tutorials:
+  * [http://www.edii.uclm.es/~useR-2013/Tutorials/kuhn/user_caret_2up.pdf](http://www.edii.uclm.es/~useR-2013/Tutorials/kuhn/user_caret_2up.pdf)
+  for time slicing
+  * [http://cran.r-project.org/web/packages/caret/vignettes/caret.pdf](http://cran.r-project.org/web/packages/caret/vignettes/caret.pdf)
+* A paper introducing the caret package
+  * [http://www.jstatsoft.org/v28/i05/paper](http://www.jstatsoft.org/v28/i05/paper)
+
+
+
+
+# Training Options
+
+
+some of the training control options
+
+
+## SPAM Example
+
+```{r loadPackage,cache=TRUE}
+library(caret); library(kernlab); data(spam)
+inTrain <- createDataPartition(y=spam$type,
+                              p=0.75, list=FALSE)
+training <- spam[inTrain,]
+testing <- spam[-inTrain,]
+modelFit <- train(type ~.,data=training, method="glm")
+```
+
+---
+
+## Train options
+
+```{r ,dependson="loadPackage"}
+args(train.default)
+```
+method
+preProcess
+weights
+metric (Accuracy for binary, RMSE for continuous)
+trControl = trainControl()
+
+
+---
+
+## Metric options
+
+__Continous outcomes__:
+  * _RMSE_ = Root mean squared error
+  * _RSquared_ = $R^2$ from regression models
+
+__Categorical outcomes__:
+  * _Accuracy_ = Fraction correct
+  * _Kappa_ = A measure of [concordance](http://en.wikipedia.org/wiki/Cohen%27s_kappa)
+  
+  
+
+--- 
+
+## trainControl
+
+```{r , dependson="loadPackage",cache=TRUE}
+args(trainControl)
+```
+method = "boot" == bootstrap or cross validation
+number == number of times to do bootstrapping or cross valiadation
+repeats == number of times to repeat cross validation
+p = size of the training set 
+other parameters for time course data initialWindow for number of time points that will be in the training data
+horizon == number of time points that you'll be predicting
+returning predictions themselves == savePredictions = T
+pre proccessing options = preProcOptions
+prediction bounds
+seeds
+parallelizing computations across multiple cores(for large number of samples.)
+
+
+
+--- 
+
+## trainControl resampling
+for trainControl function
+* _method_
+  * _boot_ = bootstrapping
+  * _boot632_ = bootstrapping with adjustment
+  * _cv_ = cross validation
+  * _repeatedcv_ = repeated cross validation
+  * _LOOCV_ = leave one out cross validation
+* _number_
+  * For boot/cross validation
+  * Number of subsamples to take
+* _repeats_
+  * Number of times to repeate subsampling
+  * If big this can _slow things down_
+
+
+---
+
+## Setting the seed
+
+* It is often useful to set an overall seed
+* You can also set a seed for each resample
+* Seeding each resample is useful for parallel fits
+* _seed_ must be a list with
+  * Length equal to number of resamples
+  * Length of each element equal to number of models fit
+
+
+
+--- 
+
+
+
+## seed example
+
+```{r seedExample, dependson="loadPackage",cache=TRUE}
+set.seed(1235); seeds <- vector(26,mode="list")
+for(i in 1:26){seeds[[i]] <- floor(runif(1,0,1e5))}
+trControl <- trainControl(seeds=seeds)
+```
+
+
+
+--- 
+
+
+## seed example
+
+```{r , dependson="seedExample",cache=TRUE}
+modelFit2 <- train(type ~.,data=training, method="glm")
+modelFit2
+```
+
+
+--- 
+
+## seed example
+
+```{r , dependson="seedExample",cache=TRUE}
+modelFit3 <- train(type ~.,data=training, method="glm")
+modelFit3
+```
+  
+  
+
+do caret tutorial and model training and tuning tutorial
+
+
+
+
+
+
+
+# Plotting Predictors
+
+
+
+
+
+## Example: predicting wages
+
+<img class=center src=../../assets/img/08_PredictionAndMachineLearning/wages.jpg height=350>
+
+Image Credit [http://www.cahs-media.org/the-high-cost-of-low-wages](http://www.cahs-media.org/the-high-cost-of-low-wages)
+
+Data from: [ISLR package](http://cran.r-project.org/web/packages/ISLR) from the book: [Introduction to statistical learning](http://www-bcf.usc.edu/~gareth/ISL/)  
+
+
+
+---
+
+## Example: Wage data
+
+```{r loadData,cache=TRUE}
+library(ISLR); library(ggplot2); library(caret);
+data(Wage)
+summary(Wage)
+```
+
+
+
+---
+
+## Get training/test sets
+
+```{r trainingTest,dependson="loadData",cache=TRUE}
+inTrain <- createDataPartition(y=Wage$wage,
+                              p=0.7, list=FALSE)
+training <- Wage[inTrain,]
+testing <- Wage[-inTrain,]
+dim(training); dim(testing)
+```
+
+
+---
+
+## Feature plot (*caret* package)
+
+```{r ,dependson="trainingTest",fig.height=4,fig.width=4}
+featurePlot(x=training[,c("age","education","jobclass")],
+            y = training$wage,
+            plot="pairs")
+```
+
+
+---
+
+## Qplot (*ggplot2* package)
+
+
+```{r ,dependson="trainingTest",fig.height=4,fig.width=6}
+qplot(age,wage,data=training)
+```
+
+
+---
+
+## Qplot with color (*ggplot2* package)
+
+
+```{r ,dependson="trainingTest",fig.height=4,fig.width=6}
+qplot(age,wage,colour=jobclass,data=training)
+```
+
+
+---
+
+## Add regression smoothers (*ggplot2* package)
+
+
+```{r ,dependson="trainingTest",fig.height=4,fig.width=6}
+qq <- qplot(age,wage,colour=education,data=training)
+qq +  geom_smooth(method='lm',formula=y~x)
+```
+
+
+---
+
+## cut2, making factors (*Hmisc* package)
+
+
+```{r cut2,dependson="trainingTest",fig.height=4,fig.width=6,cache=TRUE}
+cutWage <- cut2(training$wage,g=3)
+table(cutWage)
+```
+
+---
+
+## Boxplots with cut2
+
+
+```{r ,dependson="cut2plot",fig.height=4,fig.width=6,cache=TRUE}
+p1 <- qplot(cutWage,age, data=training,fill=cutWage,
+      geom=c("boxplot"))
+p1
+```
+
+---
+
+### Boxplots with points overlayed
+
+
+```{r ,dependson="cut2plot",fig.height=4,fig.width=9}
+p2 <- qplot(cutWage,age, data=training,fill=cutWage,
+      geom=c("boxplot","jitter"))
+grid.arrange(p1,p2,ncol=2)
+```
+
+
+---
+
+### Tables
+
+```{r ,dependson="cut2",fig.height=4,fig.width=9}
+t1 <- table(cutWage,training$jobclass)
+t1
+prop.table(t1,1)
+```
+
+
+---
+
+### Density plots
+
+```{r ,dependson="trainingTest",fig.height=4,fig.width=6}
+qplot(wage,colour=education,data=training,geom="density")
+```
+
+
+---
+
+## Notes and further reading
+
+* Make your plots only in the training set 
+  * Don't use the test set for exploration!
+* Things you should be looking for
+  * Imbalance in outcomes/predictors
+  * Outliers 
+  * Groups of points not explained by a predictor
+  * Skewed variables 
+* [ggplot2 tutorial](http://rstudio-pubs-static.s3.amazonaws.com/2176_75884214fc524dc0bc2a140573da38bb.html)
+* [caret visualizations](http://caret.r-forge.r-project.org/visualizations.html)
