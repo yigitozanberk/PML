@@ -677,7 +677,7 @@ quantile((capAve - capAveTruth)[!selectNA])
 
 # Covariate Creation
 
-
+Covariates == Predictors == Features
 
 
 
@@ -741,6 +741,8 @@ training <- Wage[inTrain,]; testing <- Wage[-inTrain,]
 
 __Basic idea - convert factor variables to [indicator variables](http://bit.ly/19ZhWB6)__
 
+dummyVars function easily does this.
+
 ```{r dummyVar,dependson="loadData"}
 table(training$jobclass)
 dummies <- dummyVars(wage ~ jobclass,data=training)
@@ -753,11 +755,15 @@ head(predict(dummies,newdata=training))
 
 ## Removing zero covariates
 
+identify variables with near zero variability, and probably not good predictors.
+
+This function gives the percentage of unique values.
+
 ```{r ,dependson="dummyVar"}
 nsv <- nearZeroVar(training,saveMetrics=TRUE)
 nsv
 ```
-
+region is %4 unique, it does not give anything to the prediction.
 
 
 ---
@@ -766,7 +772,10 @@ nsv
 
 ```{r splines,dependson="dummyVar",cache=TRUE}
 library(splines)
-bsBasis <- bs(training$age,df=3) 
+bsBasis <- bs(training$age,df=3) #3rd degree polynomial
+# 1.age, 2. age^2, 3. age^3
+#creates a polynomial variable. Here we get a 3rd degree polynomial.
+#allows for a curvy model fitting
 bsBasis
 ```
 
@@ -787,8 +796,9 @@ points(training$age,predict(lm1,newdata=training),col="red",pch=19,cex=0.5)
 
 ## Splines on the test set
 
+after you created your covariate in the training set, you need to create the same covariate exactly the same way in the test set!!!!
 ```{r ,dependson="splines",fig.height=4,fig.width=4}
-predict(bsBasis,age=testing$age)
+predict(bsBasis,age=testing$age) 
 ```
 
 
@@ -797,16 +807,208 @@ predict(bsBasis,age=testing$age)
 ## Notes and further reading
 
 * Level 1 feature creation (raw data to covariates)
-  * Science is key. Google "feature extraction for [data type]"
-  * Err on overcreation of features
+  * Science is key. Google "feature extraction for [data type]"!!!!!!! images, voice, categorical variables, vs....
+  * Err on overcreation of features. you can always filter them out.
 * Level 2 feature creation (covariates to new covariates)
   * The function _preProcess_ in _caret_ will handle some preprocessing.
   * Create new covariates if you think they will improve fit
   * Use exploratory analysis on the training set for creating them
-  * Be careful about overfitting!
+  * Be careful about overfitting! (beware of featurs 'just good for training set' and not good in general)
 * [preprocessing with caret](http://caret.r-forge.r-project.org/preprocess.html)
-* If you want to fit spline models, use the _gam_ method in the _caret_ package which allows smoothing of multiple variables.
+* If you want to fit spline models, use the _gam_ (for smoothing multiple variables) method in the _caret_ package which allows smoothing of multiple variables.
 * More on feature creation/data tidying in the Obtaining Data course from the Data Science course track. 
+
+
+
+
+
+
+
+
+# Preprocessing with PCA
+
+often there are a lot of variables that are highly correlated(which means they are telling very similar things.), similar to being the almost exact same variable. in this case it's useful to include some kind of summary.
+
+
+
+## Correlated predictors
+
+```{r loadPackage,cache=TRUE,fig.height=3.5,fig.width=3.5}
+library(caret); library(kernlab); data(spam)
+inTrain <- createDataPartition(y=spam$type,
+                              p=0.75, list=FALSE)
+training <- spam[inTrain,]
+testing <- spam[-inTrain,]
+M <- abs(cor(training[,-58]))#58 is the outcome column
+#abs value of corr between the predictor variables
+diag(M) <- 0
+#every variable has a correlation of 1 with itself(because it's itself!) so remove the 1 values by setting the diagonal to 0
+which(M > 0.8,arr.ind=T)
+#take a look at which of the variables have a corr bigger than .8
+```
+
+
+---
+
+## Correlated predictors
+
+```{r,dependson="loadPackage",cache=TRUE,fig.height=3.5,fig.width=3.5}
+names(spam)[c(34,32)]
+plot(spam[,34],spam[,32])
+```
+they appear in the data almost exactlythe same.
+
+---
+
+## Basic PCA idea
+
+* We might not need every predictor
+* A weighted combination of predictors might be better
+* We should pick this combination to capture the "most information" possible
+* Benefits
+  * Reduced number of predictors
+  * Reduced noise (due to averaging)
+
+
+---
+
+## We could rotate the plot
+
+$$ X = 0.71 \times {\rm num 415} + 0.71 \times {\rm num857}$$
+
+$$ Y = 0.71 \times {\rm num 415} - 0.71 \times {\rm num857}$$
+
+```{r,dependson="loadPackage",cache=TRUE,fig.height=3.5,fig.width=3.5}
+X <- 0.71*training$num415 + 0.71*training$num857
+Y <- 0.71*training$num415 - 0.71*training$num857
+plot(X,Y)
+```
+most of the variability is happening in the x axis.
+
+adding the two variables to together captures the most of the information in these two variables, so we'll use that.
+---
+
+## Related problems
+
+You have multivariate variables $X_1,\ldots,X_n$ so $X_1 = (X_{11},\ldots,X_{1m})$
+
+* Find a new set of multivariate variables that are uncorrelated and explain as much variance as possible.
+* If you put all the variables together in one matrix, find the best matrix created with fewer variables (lower rank) that explains the original data.
+
+
+The first goal is <font color="#330066">statistical</font> and the second goal is <font color="#993300">data compression</font>.
+
+---
+
+## Related solutions - PCA/SVD
+
+__SVD__
+
+If $X$ is a matrix with each variable in a column and each observation in a row then the SVD is a "matrix decomposition"
+
+$$ X = UDV^T$$
+
+where the columns of $U$ are orthogonal (left singular vectors), the columns of $V$ are orthogonal (right singluar vectors) and $D$ is a diagonal matrix (singular values). 
+
+__PCA__
+
+The principal components are equal to the right singular values if you first scale (subtract the mean, divide by the standard deviation) the variables.
+
+---
+
+## Principal components in R - prcomp
+
+```{r prcomp,dependson="loadPackage",cache=TRUE,fig.height=3.5,fig.width=3.5}
+smallSpam <- spam[,c(34,32)]
+prComp <- prcomp(smallSpam) #PCA on the small dataset of the variables on interest.
+plot(prComp$x[,1],prComp$x[,2])
+#first principle component captures most of the info.
+```
+
+---
+
+## Principal components in R - prcomp
+
+```{r ,dependson="prcomp",cache=TRUE,fig.height=3.5,fig.width=3.5}
+prComp$rotation
+#the rotation matrix.
+```
+
+
+---
+
+## PCA on SPAM data
+
+```{r spamPC,dependson="loadPackage",cache=TRUE,fig.height=3.5,fig.width=3.5}
+#we can do this to more than 2 variables.
+typeColor <- ((spam$type=="spam")*1 + 1)
+prComp <- prcomp(log10(spam[,-58]+1))# pca of the entire dataset in log10 transformation(because some of the data were skewed)
+plot(prComp$x[,1],prComp$x[,2],col=typeColor,xlab="PC1",ylab="PC2")
+#pca1 vs pca2
+```
+
+
+---
+
+## PCA with caret
+
+```{r ,dependson="spamPC",cache=TRUE,fig.height=3.5,fig.width=3.5}
+preProc <- preProcess(log10(spam[,-58]+1),method="pca",pcaComp=2)
+spamPC <- predict(preProc,log10(spam[,-58]+1))
+plot(spamPC[,1],spamPC[,2],col=typeColor)
+```
+
+
+---
+
+## Preprocessing with PCA
+
+```{r pcaCaret,dependson="spamPC",cache=TRUE,fig.height=3.5,fig.width=3.5}
+preProc <- preProcess(log10(training[,-58]+1),method="pca",pcaComp=2)
+trainPC <- predict(preProc,log10(training[,-58]+1))
+modelFit <- train( x = trainPC, y = training$type , method="glm")
+```
+
+---
+
+## Preprocessing with PCA
+
+```{r ,dependson="pcaCaret",cache=TRUE,fig.height=3.5,fig.width=3.5}
+testPC <- predict(preProc,log10(testing[,-58]+1))
+#again, we use the training pca to predict the test dataset.
+confusionMatrix(testing$type,predict(modelFit,testPC))
+```
+
+---
+
+## Alternative (sets # of PCs)
+
+```{r ,dependson="pcaCaret",cache=TRUE,fig.height=3.5,fig.width=3.5}
+modelFit <- train(training$type ~ .,method="glm",preProcess="pca",data=training)
+confusionMatrix(testing$type,predict(modelFit,testing))
+```
+
+---
+
+## Final thoughts on PCs
+
+* Most useful for linear-type models
+* Can make it harder to interpret predictors
+* Watch out for outliers! !!!
+  * Transform first (with logs/Box Cox)
+  * Plot predictors to identify problems
+* For more info see 
+  * Exploratory Data Analysis
+  * [Elements of Statistical Learning](http://statweb.stanford.edu/~tibs/ElemStatLearn/)
+  
+  
+  
+  
+  
+
+# Plotting with Regression
+
+
 
 
 
