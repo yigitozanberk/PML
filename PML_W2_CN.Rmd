@@ -742,7 +742,7 @@ training <- Wage[inTrain,]; testing <- Wage[-inTrain,]
 __Basic idea - convert factor variables to [indicator variables](http://bit.ly/19ZhWB6)__
 
 dummyVars function easily does this.
-
+separating categorical variables into dummy variables:
 ```{r dummyVar,dependson="loadData"}
 table(training$jobclass)
 dummies <- dummyVars(wage ~ jobclass,data=training)
@@ -1012,3 +1012,434 @@ confusionMatrix(testing$type,predict(modelFit,testing))
 
 
 
+## Key ideas
+
+* Fit a simple regression model
+* Plug in new covariates and multiply by the coefficients
+* Useful when the linear model is (nearly) correct
+
+__Pros__:
+* Easy to implement
+* Easy to interpret
+
+__Cons__:
+* Often poor performance in nonlinear settings
+
+
+---
+
+## Example: Old faithful eruptions
+
+<img class=center src=../../assets/img/08_PredictionAndMachineLearning/yellowstone.png height=400>
+
+Image Credit/Copyright Wally Pacholka [http://www.astropics.com/](http://www.astropics.com/)
+
+---
+
+## Example: Old faithful eruptions
+
+```{r faith}
+library(caret);data(faithful); set.seed(333)
+inTrain <- createDataPartition(y=faithful$waiting,
+                              p=0.5, list=FALSE)
+trainFaith <- faithful[inTrain,]; testFaith <- faithful[-inTrain,]
+head(trainFaith)
+```
+
+---
+
+## Eruption duration versus waiting time
+
+```{r dependson="faith",fig.height=4,fig.width=4}
+plot(trainFaith$waiting,trainFaith$eruptions,pch=19,col="blue",xlab="Waiting",ylab="Duration")
+```
+
+---
+
+## Fit a linear model 
+
+$$ ED_i = b_0 + b_1 WT_i + e_i $$
+
+```{r faithlm,dependson="faith",fig.height=4,fig.width=4}
+lm1 <- lm(eruptions ~ waiting,data=trainFaith)
+summary(lm1)
+```
+
+
+---
+## Model fit
+
+```{r dependson="faithlm",fig.height=4,fig.width=4}
+plot(trainFaith$waiting,trainFaith$eruptions,pch=19,col="blue",xlab="Waiting",ylab="Duration")
+lines(trainFaith$waiting,lm1$fitted,lwd=3)
+```
+
+---
+
+## Predict a new value
+
+$$\hat{ED} = \hat{b}_0 + \hat{b}_1 WT$$
+
+```{r ,dependson="faithlm",fig.height=4,fig.width=4}
+coef(lm1)[1] + coef(lm1)[2]*80
+newdata <- data.frame(waiting=80)
+predict(lm1,newdata)
+```
+
+---
+
+## Plot predictions - training and test
+
+```{r ,dependson="faithlm",fig.height=4,fig.width=8}
+par(mfrow=c(1,2))
+plot(trainFaith$waiting,trainFaith$eruptions,pch=19,col="blue",xlab="Waiting",ylab="Duration")
+lines(trainFaith$waiting,predict(lm1),lwd=3)
+plot(testFaith$waiting,testFaith$eruptions,pch=19,col="blue",xlab="Waiting",ylab="Duration")
+lines(testFaith$waiting,predict(lm1,newdata=testFaith),lwd=3)
+```
+
+---
+
+## Get training set/test set errors
+
+```{r ,dependson="faithlm",fig.height=4,fig.width=4}
+# Calculate RMSE on training
+sqrt(sum((lm1$fitted-trainFaith$eruptions)^2))
+# Calculate RMSE on test
+sqrt(sum((predict(lm1,newdata=testFaith)-testFaith$eruptions)^2))
+```
+
+---
+
+## Prediction intervals
+
+```{r ,dependson="faithlm",fig.height=4,fig.width=4}
+pred1 <- predict(lm1,newdata=testFaith,interval="prediction")
+ord <- order(testFaith$waiting) #order the values for the test dataset, test waiting times
+plot(testFaith$waiting,testFaith$eruptions,pch=19,col="blue")
+matlines(testFaith$waiting[ord],pred1[ord,],type="l",col=c(1,2,2),lty = c(1,1,1), lwd=3)
+```
+
+
+---
+
+## Same process with caret
+
+```{r caretfaith,dependson="faith",fig.height=4,fig.width=4}
+modFit <- train(eruptions ~ waiting,data=trainFaith,method="lm")
+summary(modFit$finalModel)
+```
+
+
+---
+
+## Notes and further reading
+
+* Regression models with multiple covariates can be included
+* Often useful in combination with other models 
+* [Elements of statistical learning](http://www-stat.stanford.edu/~tibs/ElemStatLearn/)
+* [Modern applied statistics with S](http://www.amazon.com/Modern-Applied-Statistics-W-N-Venables/dp/0387954570)
+* [Introduction to statistical learning](http://www-bcf.usc.edu/~gareth/ISL/)
+
+
+
+# Predicting with Regression Multiple Covariates
+
+
+
+
+
+
+
+## Example: predicting wages
+
+<img class=center src=../../assets/img/08_PredictionAndMachineLearning/wages.jpg height=350>
+
+Image Credit [http://www.cahs-media.org/the-high-cost-of-low-wages](http://www.cahs-media.org/the-high-cost-of-low-wages)
+
+Data from: [ISLR package](http://cran.r-project.org/web/packages/ISLR) from the book: [Introduction to statistical learning](http://www-bcf.usc.edu/~gareth/ISL/)
+
+
+
+---
+
+## Example: Wage data
+
+```{r loadData,cache=TRUE}
+library(ISLR); library(ggplot2); library(caret);
+data(Wage); Wage <- subset(Wage,select=-c(logwage))
+summary(Wage)
+```
+
+
+
+---
+
+### Get training/test sets
+
+```{r trainingTest,dependson="loadData",cache=TRUE}
+inTrain <- createDataPartition(y=Wage$wage,
+                              p=0.7, list=FALSE)
+training <- Wage[inTrain,]; testing <- Wage[-inTrain,]
+dim(training); dim(testing)
+```
+
+
+
+---
+
+### Feature plot
+
+```{r ,dependson="trainingTest",fig.height=4,fig.width=4}
+featurePlot(x=training[,c("age","education","jobclass")],
+            y = training$wage,
+            plot="pairs")
+```
+hard to see here, but you can see that for the job class, information group appears to be higher. 
+The age variable has a relationship with the outcome..
+
+
+---
+
+### Plot age versus wage
+
+
+```{r ,dependson="trainingTest",fig.height=4,fig.width=6}
+qplot(age,wage,data=training)
+```
+there appears to be a trend. also, the group of points at the top seems interesting.
+
+---
+
+### Plot age versus wage colour by jobclass
+
+
+```{r ,dependson="trainingTest",fig.height=4,fig.width=6}
+qplot(age,wage,colour=jobclass,data=training)
+```
+here it's more apparent that the must upwards points are mostly blue, which means they are from the information class jobs.
+
+---
+
+### Plot age versus wage colour by education
+
+
+```{r ,dependson="trainingTest",fig.height=4,fig.width=6}
+qplot(age,wage,colour=education,data=training)
+```
+also, education variable seems to be correlated with higher wage, explaining a lot of variation.
+
+
+---
+
+## Fit a linear model 
+
+$$ ED_i = b_0 + b_1 age + b_2 I(Jobclass_i="Information") + \sum_{k=1}^4 \gamma_k I(education_i= level k) $$
+
+```{r modelFit,dependson="trainingTest", cache=TRUE,fig.height=4,fig.width=4}
+modFit<- train(wage ~ age + jobclass + education,
+               method = "lm",data=training)
+finMod <- modFit$finalModel
+print(modFit)
+```
+
+Education levels: 1 = HS Grad, 2 = Some College, 3 = College Grad, 4 = Advanced Degree
+
+---
+
+## Diagnostics
+
+```{r,dependson="modelFit",fig.height=5,fig.width=5}
+plot(finMod,1,pch=19,cex=0.5,col="#00000010")
+#gives residuals vs fitted values and outliers
+```
+
+
+---
+
+## Color by variables not used in the model 
+
+```{r,dependson="modelFit",fig.height=4,fig.width=6}
+qplot(finMod$fitted,finMod$residuals,colour=race,data=training)
+```
+
+---
+
+## Plot by index
+
+```{r,dependson="modelFit",fig.height=5,fig.width=5}
+plot(finMod$residuals,pch=19)
+#residuals by index - which row of the dataset
+#if this picture is not random, it means you're missing a variable. There is a relationship wrt age, time, or some other factor.
+```
+
+
+---
+
+## Predicted versus truth in test set
+
+```{r predictions, dependson="modelFit",fig.height=4,fig.width=6}
+pred <- predict(modFit, testing)
+qplot(wage,pred,colour=year,data=testing)
+```
+
+---
+
+## If you want to use all covariates
+
+```{r allCov,dependson="trainingTest",fig.height=4,fig.width=4,warning=FALSE}
+modFitAll<- train(wage ~ .,data=training,method="lm")
+pred <- predict(modFitAll, testing)
+qplot(wage,pred,data=testing)
+```
+
+
+---
+
+## Notes and further reading
+
+* Often useful in combination with other models 
+* [Elements of statistical learning](http://www-stat.stanford.edu/~tibs/ElemStatLearn/)
+* [Modern applied statistics with S](http://www.amazon.com/Modern-Applied-Statistics-W-N-Venables/dp/0387954570)
+* [Introduction to statistical learning](http://www-bcf.usc.edu/~gareth/ISL/)
+
+
+
+Quiz Question 4
+
+Load the Alzheimer’s disease data using the commands:
+```{r}
+library(caret)
+library(AppliedPredictiveModeling)
+set.seed(3433)
+data(AlzheimerDisease)
+adData = data.frame(diagnosis,predictors)
+inTrain = createDataPartition(adData$diagnosis, p = 3/4)[[1]]
+training = adData[ inTrain,]
+testing = adData[-inTrain,]
+```
+
+Find all the predictor variables in the training set that begin with IL. Perform principal components on these variables with the preProcess() function from the caret package. Calculate the number of principal components needed to capture 90% of the variance. How many are there?
+
+```{r}
+library(ggplot2)
+library(caret)
+ncol(training)
+```
+
+```{r}
+which(sapply(adData,class)=="factor")
+```
+
+```{r}
+summary(training$diagnosis)
+```
+
+```{r}
+training$diagnosis = as.numeric(training$diagnosis)
+p <- prcomp(training[,grep('^IL',names(training))])
+p$rotation[,1:7]
+```
+
+```{r}
+qplot(1:length(p$sdev),p$sdev / sum(p$sdev))
+```
+
+cumulative sum <.90
+
+```{r}
+which(cumsum(p$sdev) / sum(p$sdev) <= .9)
+```
+
+```{r}
+(cumsum(p$sdev) / sum(p$sdev))[8]
+```
+
+
+```{r}
+preProc <- preProcess(training[,grep('^IL',names(training))],method="pca",thres=.9)
+
+# See the result here
+preProc
+```
+
+
+
+
+# Question 5
+
+```{r}
+library(caret)
+library(AppliedPredictiveModeling)
+set.seed(3433)
+data(AlzheimerDisease)
+adData = data.frame(diagnosis,predictors)
+inTrain = createDataPartition(adData$diagnosis, p = 3/4)[[1]]
+training = adData[ inTrain,]
+testing = adData[-inTrain,]
+```
+
+
+Create a training data set consisting of only the predictors with variable names beginning with IL and the diagnosis. Build two predictive models, one using the predictors as they are and one using PCA with principal components explaining 80% of the variance in the predictors. Use method="glm" in the train function.
+
+
+What is the accuracy of each method in the test set? Which is more accurate?
+
+```{r}
+trainSmall <- data.frame(training[,grep('^IL',names(training))],training$diagnosis)
+testSmall <- data.frame(testing[,grep('^IL',names(testing))],testing$diagnosis)
+preProc <- preProcess(trainSmall[-13],method="pca",thres=.8)
+trainPC <- predict(preProc,trainSmall[-13])
+testPC <- predict(preProc,testSmall[-13])
+
+New_training <- data.frame(training[,grep('^IL',names(training))],training$diagnosis)
+New_testing <- data.frame(testing[,grep('^IL',names(testing))],testing$diagnosis)
+
+
+set.seed(13)
+PCFit <- train(training.diagnosis ~.,
+               data = New_training, 
+               method ="glm",
+               preProc = "pca",
+               trControl = trainControl(preProcOptions = list(thresh = 0.8)))
+
+NotPCFit <- train(training.diagnosis~.,data=New_training,method="glm")
+
+PCTestPredict <- predict(PCFit,newdata=New_testing)
+NotPCTestPredict <- predict(NotPCFit,newdata=New_testing)
+
+confusionMatrix(PCTestPredict,testSmall$testing.diagnosis)
+confusionMatrix(NotPCTestPredict,testSmall$testing.diagnosis)
+
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+max kuhn
+I don't have the data so it is hard to tell. You probably don't want to use the formula method with the data frame name. Try using Segment ~ ., data = trainset[-c(1,2)] instead.
+
+New_training <- data.frame(training[,grep('^IL',names(training))],training$diagnosis)
+New_testing <- data.frame(testing[,grep('^IL',names(testing))],testing$diagnosis)
+
+
+set.seed(13)
+PCFit <- train(training.diagnosis ~.,
+               data = New_training, 
+               method ="glm",
+               preProc = "pca",
+               trControl = trainControl(preProcOptions = list(thresh = 0.8)))
+
+
+it will automatically preprocess the data and assemble the features and outcome (and also do this on new data being predicted). The code is a lot cleaner and less subject to issues.
+the variation caused by PCA is included in resample (i.e. the PCA loadings are recalculated for every resample as well as the final time on the entire training set). Doing PCA outside of sampling will give the resampling results an optimistic bias although it is hard to say how much).
