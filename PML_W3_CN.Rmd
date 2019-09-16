@@ -1,0 +1,435 @@
+---
+title: "Practicle Machine Learning Week 3 Class Notes"
+author: "Yigit Ozan Berk"
+date: "9/16/2019"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+1. Predicting with trees
+2. Bagging
+3. Random Forests
+4. Boosting
+5. Model Based Prediction
+6. Quiz
+
+# Predicting with Trees
+
+
+
+## Key ideas
+
+* Iteratively split variables into groups
+* Split where maximally predictive
+* Evaluate "homogeneity" within each branch!!(split again if necessary)
+* Fitting multiple trees often works better (forests)
+
+__Pros__:
+* Easy to implement
+* Easy to interpret
+* Better performance in nonlinear settings!!!!!(compared to linear models)
+
+__Cons__:
+* Without pruning/cross-validation can lead to overfitting!!!
+* Harder to estimate uncertainty
+* Results may be variable
+
+
+---
+
+## Example Tree
+
+<img class=center src=../../assets/img/08_PredictionAndMachineLearning/obamaTree.png height=450>
+
+[http://graphics8.nytimes.com/images/2008/04/16/us/0416-nat-subOBAMA.jpg](http://graphics8.nytimes.com/images/2008/04/16/us/0416-nat-subOBAMA.jpg)
+
+---
+
+## Basic algorithm
+
+1. Start with all variables in one group
+2. Find the variable/split that best separates the outcomes
+3. Divide the data into two groups ("leaves") on that split ("node")
+4. Within each split, find the best variable/split that separates the outcomes
+5. Continue until the groups are too small or sufficiently "pure"
+
+---
+
+## Measures of impurity
+
+
+$$\hat{p}_{mk} = \frac{1}{N_m}\sum_{x_i\; in \; Leaf \; m}\mathbb{1}(y_i = k)$$
+
+
+__Misclassification Error__: 
+$$ 1 - \hat{p}_{mk(m)}$$
+
+__Gini index__:
+$$ \sum_{k \neq k'} \hat{p}_{mk} \times \hat{p}_{mk'} = \sum_{k=1}^K \hat{p}_{mk}(1-\hat{p}_{mk}) $$
+
+__Cross-entropy or deviance__:
+
+$$ -\sum_{k=1}^K \hat{p}_{mk} \ln\hat{p}_{mk} $$
+
+
+---
+
+## Example: Iris Data
+
+```{r iris, cache=TRUE}
+data(iris); library(ggplot2)
+names(iris)
+table(iris$Species)
+```
+we have 4 predictors, we are trying to predict species
+
+---
+
+## Create training and test sets
+
+```{r trainingTest, dependson="iris",cache=TRUE}
+inTrain <- createDataPartition(y=iris$Species,
+                              p=0.7, list=FALSE)
+training <- iris[inTrain,]
+testing <- iris[-inTrain,]
+dim(training); dim(testing)
+```
+
+
+---
+
+## Iris petal widths/sepal width
+
+```{r, dependson="trainingTest",fig.height=4,fig.width=6}
+qplot(Petal.Width,Sepal.Width,colour=Species,data=training)
+```
+3 very distinct clusters.
+
+can be very challenging for linear models. but not trees
+
+---
+
+## Iris petal widths/sepal width
+
+```{r createTree, dependson="trainingTest", cache=TRUE}
+library(caret)
+modFit <- train(Species ~ .,method="rpart",data=training)
+#rpart for classification trees
+print(modFit$finalModel)
+```
+
+---
+
+## Plot tree
+
+```{r, dependson="createTree", fig.height=4.5, fig.width=4.5}
+plot(modFit$finalModel, uniform=TRUE, 
+      main="Classification Tree")
+text(modFit$finalModel, use.n=TRUE, all=TRUE, cex=.8)
+```
+
+
+---
+
+## Prettier plots
+
+```{r, dependson="createTree", fig.height=4.5, fig.width=4.5}
+library(rattle)
+fancyRpartPlot(modFit$finalModel)
+#fancier trees
+```
+
+---
+
+## Predicting new values
+
+```{r newdata, dependson="createTree", fig.height=4.5, fig.width=4.5, cache=TRUE}
+predict(modFit,newdata=testing)
+```
+classification tree was created to predict a type of species, so predict gives out a list of classes.
+
+---
+
+## Notes and further resources
+
+* Classification trees are non-linear models
+  * They use interactions between variables!!!!if you have a large number of classes, the models can overfit a little bit.
+  * Data transformations may be less important (monotone transformations)(that doesn't change the order of the variable, but maybe makes them larger)
+  * Trees can also be used for regression problems (continuous outcome)(you can use RMSE for classification trees.)
+* Note that there are multiple tree building options
+in R both in the caret package - [party](http://cran.r-project.org/web/packages/party/index.html), [rpart](http://cran.r-project.org/web/packages/rpart/index.html) and out of the caret package - [tree](http://cran.r-project.org/web/packages/tree/index.html)
+* [Introduction to statistical learning](http://www-bcf.usc.edu/~gareth/ISL/)
+* [Elements of Statistical Learning](http://www-stat.stanford.edu/~tibs/ElemStatLearn/)
+* [Classification and regression trees](http://www.amazon.com/Classification-Regression-Trees-Leo-Breiman/dp/0412048418)
+
+
+
+
+
+
+
+
+
+# Bagging
+
+Sometimes when you have fit complicated models, sometimes if you average those models together, you get a smoother model fit that gives you a better balance between potential bias in your fit, and variance in your fit.
+
+
+## Bootstrap aggregating (bagging)
+
+__Basic idea__: 
+
+1. Resample cases and recalculate predictions
+2. Average or majority vote
+
+__Notes__:
+
+* Similar bias (to fitting any one of the individual models you have fit)
+* Reduced variance (because you have averaged a bunch of predictors together)
+* More useful for non-linear functions
+
+
+---
+
+## Ozone data
+
+```{r ozoneData, cache=TRUE}
+library(ElemStatLearn); data(ozone,package="ElemStatLearn")
+ozone <- ozone[order(ozone$ozone),]#order by the outcome
+head(ozone)
+```
+[http://en.wikipedia.org/wiki/Bootstrap_aggregating](http://en.wikipedia.org/wiki/Bootstrap_aggregating)
+
+predict temperature as a function of ozone
+
+---
+
+## Bagged loess
+
+```{r baggedOzone, dependson="ozoneData",cache=TRUE}
+ll <- matrix(NA,nrow=10,ncol=155)
+for(i in 1:10){
+        #resample the dataset for 10 different times.
+  ss <- sample(1:dim(ozone)[1],replace=T)
+  #each time with replacement.
+  ozone0 <- ozone[ss,]; ozone0 <- ozone0[order(ozone0$ozone),]
+  #create a new dataset ozone0.- the reampled data set for that particular element of the loop. that's just the subset of the data set corresponding to our ramdom sample
+  #reorder everytime with the ozone variable
+  loess0 <- loess(temperature ~ ozone,data=ozone0,span=0.2)
+  #fit a loess curve each time. use the resampled data set. and span is a measure of how smooth that vector will be.
+  ll[i,] <- predict(loess0,newdata=data.frame(ozone=1:155))
+  #prediction of the loess curve.
+}
+#I've resampled the dataset 10 different times. Fit a smooth curve 10 different times. then i will average those values
+```
+ 
+
+
+---
+
+## Bagged loess
+
+```{r, dependson="baggedOzone",fig.height=4.5,fig.width=4.5}
+plot(ozone$ozone,ozone$temperature,pch=19,cex=0.5)
+for(i in 1:10){lines(1:155,ll[i,],col="grey",lwd=2)}
+lines(1:155,apply(ll,2,mean),col="red",lwd=2)
+#red line is the averaged loess curve. grey lines are the loess curve of each resampled set.
+```
+
+## bagging in caret
+
+some models perform bagging for you, in train() function consider method options:
+
+- bagEarth
+- treebag
+- bagFDA
+
+alternatively you can bag any model you choose using the bag() function
+
+
+```{r}
+library(party)
+predictors = data.frame(ozone = ozone$ozone)
+temperature = ozone$temperature
+#take you predictor variable and put it in a data frame
+#take the outcome variable
+treebag = bag(predictors, temperature, B = 10,#no of replications
+              bagControl = bagControl(fit = ctreeBag$fit,
+              #how i'm going to fit the model
+                                      #~call to train function
+                                      predict = ctreeBag$pred,
+                                      #~call to the predict function from a trained model
+                                      aggregate = ctreeBag$aggregate))
+                                        #average the results
+```
+www.inside-r.org/packages/cran/caret/docs/nbBag
+
+```{r}
+plot(ozone$ozone, temperature, col = "lightgrey", pch = 19)
+points(ozone$ozone, predict(treebag$fits[[1]]$fit, predictors), pch = 19, col = "red")
+points(ozone$ozone, predict(treebag, predictors), pch = 19, col = "blue")
+```
+grey are the actual observed values. 
+red dots represent the fit from a single conditional regression tree
+it doesn't capture the trand at the lower left. - flat lines
+blue fit is the fit from the bagged regression
+
+
+```{r}
+ctreeBag$fit
+```
+it takes the data.frame and the outcome, uses the ctree function to create a conditional tree
+
+```{r}
+ctreeBag$pred
+```
+prediction takes in the object from the ctree model fit, and the dataset - to get a new prediction
+
+calculates a probability matrix
+
+```{r}
+ctreeBag$aggregate
+```
+gets the prediction from every single model fits
+takes the median of every value.
+---
+
+## Notes and further resources
+
+__Notes__:
+
+* Bagging is most useful for nonlinear models!!!!!!!widely used
+* Often used with trees - an extension is random forests!!
+* Several models use bagging in caret's _train_ function
+
+__Further resources__:
+
+* [Bagging](http://en.wikipedia.org/wiki/Bootstrap_aggregating)
+* [Bagging and boosting](http://stat.ethz.ch/education/semesters/FS_2008/CompStat/sk-ch8.pdf)
+* [Elements of Statistical Learning](http://www-stat.stanford.edu/~tibs/ElemStatLearn/)
+
+
+
+
+
+
+# Random Forests
+
+~ an extension of bagging
+
+
+
+
+
+## Random forests
+
+1. Bootstrap samples
+2. At each split, bootstrap variables!!! (only a subset of the variables is considered in each split)
+3. Grow multiple trees and vote
+
+__Pros__:
+
+1. Accuracy!
+
+__Cons__:
+
+1. Speed(it has to build a large number of trees)
+2. Interpretability
+3. Overfitting(hard to comprehend which trees are causing overfitting)
+
+
+---
+
+## Random forests
+
+<img class=center src=../../assets/img/08_PredictionAndMachineLearning/forests.png height=400>
+
+[http://www.robots.ox.ac.uk/~az/lectures/ml/lect5.pdf](http://www.robots.ox.ac.uk/~az/lectures/ml/lect5.pdf)
+
+
+---
+
+## Iris data
+
+```{r iris, cache=TRUE}
+data(iris); library(ggplot2)
+inTrain <- createDataPartition(y=iris$Species,
+                              p=0.7, list=FALSE)
+training <- iris[inTrain,]
+testing <- iris[-inTrain,]
+```
+
+
+---
+
+## Random forests
+
+```{r forestIris, dependson="irisData",fig.height=4,fig.width=4,cache=TRUE}
+library(caret)
+modFit <- train(Species~ .,data=training,method="rf",prox=TRUE)
+#prox = T produces a little bit of extra information
+#outcome species, and other variables as potential predictors
+modFit
+```
+mtry = the number of repeated trees that it's going to build
+---
+
+## Getting a single tree
+???
+```{r , dependson="forestIris",fig.height=4,fig.width=4}
+library(randomForest)
+getTree(modFit$finalModel,k=2)
+```
+----------
+---
+
+## Class "centers"
+
+```{r centers, dependson="forestIris",fig.height=4,fig.width=4}
+irisP <- classCenter(training[,c(3,4)], training$Species, modFit$finalModel$prox)
+irisP <- as.data.frame(irisP); irisP$Species <- rownames(irisP)
+p <- qplot(Petal.Width, Petal.Length, col=Species,data=training)
+p + geom_point(aes(x=Petal.Width,y=Petal.Length,col=Species),size=5,shape=4,data=irisP)
+```
+
+---
+
+## Predicting new values
+
+```{r predForest, dependson="centers",fig.height=4,fig.width=4,cache=TRUE}
+pred <- predict(modFit,testing); testing$predRight <- pred==testing$Species
+table(pred,testing$Species)
+```
+
+---
+
+## Predicting new values
+
+```{r, dependson="predForest",fig.height=4,fig.width=4}
+qplot(Petal.Width,Petal.Length,colour=predRight,data=testing,main="newdata Predictions")
+```
+
+---
+
+## Notes and further resources
+
+__Notes__:
+
+* Random forests are usually one of the two top
+performing algorithms along with boosting in prediction contests.
+* Random forests are difficult to interpret but often very accurate. 
+* Care should be taken to avoid overfitting (see [rfcv](http://cran.r-project.org/web/packages/randomForest/randomForest.pdf) funtion)
+
+
+__Further resources__:
+
+* [Random forests](http://www.stat.berkeley.edu/~breiman/RandomForests/cc_home.htm)
+* [Random forest Wikipedia](http://en.wikipedia.org/wiki/Random_forest)
+* [Elements of Statistical Learning](http://www-stat.stanford.edu/~tibs/ElemStatLearn/)
+
+
+
+
