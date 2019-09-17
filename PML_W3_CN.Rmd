@@ -378,7 +378,7 @@ mtry = the number of repeated trees that it's going to build
 ---
 
 ## Getting a single tree
-???
+
 ```{r , dependson="forestIris",fig.height=4,fig.width=4}
 library(randomForest)
 getTree(modFit$finalModel,k=2)
@@ -390,9 +390,12 @@ getTree(modFit$finalModel,k=2)
 
 ```{r centers, dependson="forestIris",fig.height=4,fig.width=4}
 irisP <- classCenter(training[,c(3,4)], training$Species, modFit$finalModel$prox)
+#centers for the predicted values
 irisP <- as.data.frame(irisP); irisP$Species <- rownames(irisP)
+#centers dataset and species dataset
 p <- qplot(Petal.Width, Petal.Length, col=Species,data=training)
 p + geom_point(aes(x=Petal.Width,y=Petal.Length,col=Species),size=5,shape=4,data=irisP)
+#the pedal width and pedal length points
 ```
 
 ---
@@ -402,14 +405,16 @@ p + geom_point(aes(x=Petal.Width,y=Petal.Length,col=Species),size=5,shape=4,data
 ```{r predForest, dependson="centers",fig.height=4,fig.width=4,cache=TRUE}
 pred <- predict(modFit,testing); testing$predRight <- pred==testing$Species
 table(pred,testing$Species)
-```
 
+```
+we missed 2 values with random forest model, but still very accurate
 ---
 
 ## Predicting new values
 
 ```{r, dependson="predForest",fig.height=4,fig.width=4}
 qplot(Petal.Width,Petal.Length,colour=predRight,data=testing,main="newdata Predictions")
+#the two misclassed values are at the edge
 ```
 
 ---
@@ -419,17 +424,455 @@ qplot(Petal.Width,Petal.Length,colour=predRight,data=testing,main="newdata Predi
 __Notes__:
 
 * Random forests are usually one of the two top
-performing algorithms along with boosting in prediction contests.
+performing algorithms along with boosting in prediction contests.!!!!!
 * Random forests are difficult to interpret but often very accurate. 
 * Care should be taken to avoid overfitting (see [rfcv](http://cran.r-project.org/web/packages/randomForest/randomForest.pdf) funtion)
 
 
 __Further resources__:
 
-* [Random forests](http://www.stat.berkeley.edu/~breiman/RandomForests/cc_home.htm)
+* [Random forests](http://www.stat.berkeley.edu/~breiman/RandomForests/cc_home.htm) -- inventor!!!
 * [Random forest Wikipedia](http://en.wikipedia.org/wiki/Random_forest)
 * [Elements of Statistical Learning](http://www-stat.stanford.edu/~tibs/ElemStatLearn/)
 
 
 
+
+
+
+
+
+# Boosting
+
+
+random forst and boosting is the two most accurately used.
+
+
+
+
+
+## Basic idea
+
+1. Take lots of (possibly) weak predictors
+2. Weight them and add them up
+3. Get a stronger predictor
+
+
+---
+
+## Basic idea behind boosting
+
+1. Start with a set of classifiers $h_1,\ldots,h_k$
+  * Examples: All possible trees, all possible regression models, all possible cutoffs.
+2. Create a classifier that combines classification functions:
+$f(x) = \rm{sgn}\left(\sum_{t=1}^T \alpha_t h_t(x)\right)$
+  * Goal is to minimize error (on training set)
+  * Iterative, select one $h$ at each step
+  * Calculate weights based on errors
+  * Upweight missed classifications and select next $h$
+  
+[Adaboost on Wikipedia](http://en.wikipedia.org/wiki/AdaBoost) most famous boosting algorithm
+
+[http://webee.technion.ac.il/people/rmeir/BoostingTutorial.pdf](http://webee.technion.ac.il/people/rmeir/BoostingTutorial.pdf)
+
+---
+
+## Simple example
+
+<img class=center src=../../assets/img/08_PredictionAndMachineLearning/ada1.png height=450>
+
+[http://webee.technion.ac.il/people/rmeir/BoostingTutorial.pdf](http://webee.technion.ac.il/people/rmeir/BoostingTutorial.pdf)
+
+---
+
+## Round 1: adaboost
+
+<img class=center src=../../assets/img/08_PredictionAndMachineLearning/adar1.png height=450>
+
+[http://webee.technion.ac.il/people/rmeir/BoostingTutorial.pdf](http://webee.technion.ac.il/people/rmeir/BoostingTutorial.pdf)
+
+---
+
+## Round 2 & 3
+
+<img class=center src=../../assets/img/08_PredictionAndMachineLearning/ada2.png height=450>
+
+[http://webee.technion.ac.il/people/rmeir/BoostingTutorial.pdf](http://webee.technion.ac.il/people/rmeir/BoostingTutorial.pdf)
+
+
+---
+
+## Completed classifier
+
+<img class=center src=../../assets/img/08_PredictionAndMachineLearning/ada3.png height=450>
+
+[http://webee.technion.ac.il/people/rmeir/BoostingTutorial.pdf](http://webee.technion.ac.il/people/rmeir/BoostingTutorial.pdf)
+
+---
+
+## Boosting in R 
+
+* Boosting can be used with any subset of classifiers
+* One large subclass is [gradient boosting](http://en.wikipedia.org/wiki/Gradient_boosting)!!!!!!
+* R has multiple boosting libraries. Differences include the choice of basic classification functions and combination rules.
+  * [gbm](http://cran.r-project.org/web/packages/gbm/index.html) - boosting with trees.
+  * [mboost](http://cran.r-project.org/web/packages/mboost/index.html) - model based boosting
+  * [ada](http://cran.r-project.org/web/packages/ada/index.html) - statistical boosting based on [additive logistic regression](http://projecteuclid.org/DPubS?service=UI&version=1.0&verb=Display&handle=euclid.aos/1016218223)
+  * [gamBoost](http://cran.r-project.org/web/packages/GAMBoost/index.html) for boosting generalized additive models
+* Most of these are available in the caret package 
+
+!!!!!!!!!!!
+
+---
+
+## Wage example
+
+```{r wage, cache=TRUE}
+library(ISLR); data(Wage); library(ggplot2); library(caret);
+Wage <- subset(Wage,select=-c(logwage))
+inTrain <- createDataPartition(y=Wage$wage,
+                              p=0.7, list=FALSE)
+training <- Wage[inTrain,]; testing <- Wage[-inTrain,]
+```
+
+
+---
+
+## Fit the model
+
+```{r, dependson="wage", cache=TRUE}
+install.packages("gbm")
+library(gbm)
+modFit <- train(wage ~ ., method="gbm",data=training,verbose=FALSE)
+#wage as a function of all variables.
+#gbm does boosting with trees
+#verbose = F because it will produce a lot of outcome
+print(modFit)
+```
+
+---
+
+## Plot the results
+
+```{r, dependson="wage", fig.height=4,fig.width=4}
+qplot(predict(modFit,testing),wage,data=testing)
+#predicting results of the testing set
+```
+reasonable good prediction, although it seems there is reasonably more variability here
+
+
+---
+
+## Notes and further reading
+
+* A couple of nice tutorials for boosting
+  * Freund and Shapire - [http://www.cc.gatech.edu/~thad/6601-gradAI-fall2013/boosting.pdf](http://www.cc.gatech.edu/~thad/6601-gradAI-fall2013/boosting.pdf)
+  * Ron Meir- [http://webee.technion.ac.il/people/rmeir/BoostingTutorial.pdf](http://webee.technion.ac.il/people/rmeir/BoostingTutorial.pdf)
+* Boosting, random forests, and model ensembling are the most common tools that win Kaggle and other prediction contests. 
+  * [http://www.netflixprize.com/assets/GrandPrize2009_BPC_BigChaos.pdf](http://www.netflixprize.com/assets/GrandPrize2009_BPC_BigChaos.pdf)
+  * [https://kaggle2.blob.core.windows.net/wiki-files/327/09ccf652-8c1c-4a3d-b979-ce2369c985e4/Willem%20Mestrom%20-%20Milestone%201%20Description%20V2%202.pdf](https://kaggle2.blob.core.windows.net/wiki-files/327/09ccf652-8c1c-4a3d-b979-ce2369c985e4/Willem%20Mestrom%20-%20Milestone%201%20Description%20V2%202.pdf)
+  
+  random forest and boosting combination in the link above.
+  
+  
+  
+  
+
+
+
+# Model Based Prediction
+
+
+
+
+
+
+## Basic idea
+
+1. Assume the data follow a probabilistic model
+2. Use Bayes' theorem to identify optimal classifiers
+
+__Pros:__
+
+* Can take advantage of structure of the data
+* May be computationally convenient
+* Are reasonably accurate on real problems
+
+__Cons:__
+
+* Make additional assumptions about the data
+* When the model is incorrect you may get reduced accuracy
+
+---
+
+## Model based approach
+
+
+1. Our goal is to build parametric model for conditional distribution $P(Y = k | X = x)$
+
+2. A typical approach is to apply [Bayes theorem](http://en.wikipedia.org/wiki/Bayes'_theorem):
+$$ Pr(Y = k | X=x) = \frac{Pr(X=x|Y=k)Pr(Y=k)}{\sum_{\ell=1}^K Pr(X=x |Y = \ell) Pr(Y=\ell)}$$
+$$Pr(Y = k | X=x) = \frac{f_k(x) \pi_k}{\sum_{\ell = 1}^K f_{\ell}(x) \pi_{\ell}}$$
+
+3. Typically prior probabilities $\pi_k$ are set in advance.
+
+4. A common choice for $f_k(x) = \frac{1}{\sigma_k \sqrt{2 \pi}}e^{-\frac{(x-\mu_k)^2}{\sigma_k^2}}$, a Gaussian distribution
+
+5. Estimate the parameters ($\mu_k$,$\sigma_k^2$) from the data.
+
+6. Classify to the class with the highest value of $P(Y = k | X = x)$
+
+---
+
+## Classifying using the model
+
+A range of models use this approach
+
+* Linear discriminant analysis assumes $f_k(x)$ is multivariate Gaussian with same covariances (lda)
+* Quadratic discrimant analysis assumes $f_k(x)$ is multivariate Gaussian with different covariances
+* [Model based prediction](http://www.stat.washington.edu/mclust/) assumes more complicated versions for the covariance matrix 
+* Naive Bayes assumes independence between features for model building
+
+http://statweb.stanford.edu/~tibs/ElemStatLearn/
+
+
+---
+
+## Why linear discriminant analysis?
+
+$$log \frac{Pr(Y = k | X=x)}{Pr(Y = j | X=x)}$$
+$$ = log \frac{f_k(x)}{f_j(x)} + log \frac{\pi_k}{\pi_j}$$
+$$ = log \frac{\pi_k}{\pi_j} - \frac{1}{2}(\mu_k + \mu_j)^T \Sigma^{-1}(\mu_k + \mu_j)$$
+$$ + x^T \Sigma^{-1} (\mu_k - \mu_j)$$
+
+http://statweb.stanford.edu/~tibs/ElemStatLearn/
+
+
+---
+
+## Decision boundaries
+
+<img class="center" src="../../assets/img/ldaboundary.png" height=500>
+
+---
+
+## Discriminant function
+
+$$\delta_k(x) = x^T \Sigma^{-1} \mu_k - \frac{1}{2}\mu_k \Sigma^{-1}\mu_k + log(\mu_k)$$
+
+
+* Decide on class based on $\hat{Y}(x) = argmax_k \delta_k(x)$
+* We usually estimate parameters with maximum likelihood
+
+
+---
+
+## Naive Bayes
+
+Suppose we have many predictors, we would want to model: $P(Y = k | X_1,\ldots,X_m)$
+
+We could use Bayes Theorem to get:
+
+$$P(Y = k | X_1,\ldots,X_m) = \frac{\pi_k P(X_1,\ldots,X_m| Y=k)}{\sum_{\ell = 1}^K P(X_1,\ldots,X_m | Y=k) \pi_{\ell}}$$
+$$ \propto \pi_k P(X_1,\ldots,X_m| Y=k)$$
+
+This can be written:
+
+$$P(X_1,\ldots,X_m, Y=k) = \pi_k P(X_1 | Y = k)P(X_2,\ldots,X_m | X_1,Y=k)$$
+$$ = \pi_k P(X_1 | Y = k) P(X_2 | X_1, Y=k) P(X_3,\ldots,X_m | X_1,X_2, Y=k)$$
+$$ = \pi_k P(X_1 | Y = k) P(X_2 | X_1, Y=k)\ldots P(X_m|X_1\ldots,X_{m-1},Y=k)$$
+
+We could make an assumption to write this:
+
+$$ \approx \pi_k P(X_1 | Y = k) P(X_2 | Y = k)\ldots P(X_m |,Y=k)$$
+
+---
+
+## Example: Iris Data
+
+```{r iris, cache=TRUE}
+data(iris); library(ggplot2)
+names(iris)
+table(iris$Species)
+```
+
+
+---
+
+## Create training and test sets
+
+```{r trainingTest, dependson="iris",cache=TRUE}
+inTrain <- createDataPartition(y=iris$Species,
+                              p=0.7, list=FALSE)
+training <- iris[inTrain,]
+testing <- iris[-inTrain,]
+dim(training); dim(testing)
+```
+
+---
+
+## Build predictions
+
+```{r fit,dependson="trainingTest"}
+install.packages("klaR")
+library(klaR)
+modlda = train(Species ~ .,data=training,method="lda")
+#linear discriminant analysis
+modnb = train(Species ~ ., data=training,method="nb")
+#naive bayes
+plda = predict(modlda,testing); pnb = predict(modnb,testing)
+table(plda,pnb)
+```
+
+vary similar results
+---
+
+## Comparison of results
+
+```{r,dependson="fit",fig.height=4,fig.width=4}
+equalPredictions = (plda==pnb)
+qplot(Petal.Width,Sepal.Width,colour=equalPredictions,data=testing)
+```
+
+---
+
+## Notes and further reading
+
+* [Introduction to statistical learning](http://www-bcf.usc.edu/~gareth/ISL/)
+* [Elements of Statistical Learning](http://www-stat.stanford.edu/~tibs/ElemStatLearn/)
+* [Model based clustering](http://www.stat.washington.edu/raftery/Research/PDF/fraley2002.pdf)
+* [Linear Discriminant Analysis](http://en.wikipedia.org/wiki/Linear_discriminant_analysis)
+* [Quadratic Discriminant Analysis](http://en.wikipedia.org/wiki/Quadratic_classifier)
+
+!!!!!!!!!
+
+
+
+
+# Week3 Quiz
+
+
+```{r}
+install.packages("pgmm")
+library(AppliedPredictiveModeling)
+library(caret)
+library(ElemStatLearn)
+library(pgmm)
+library(rpart)
+```
+
+
+
+## Question 1
+```{r}
+data(segmentationOriginal)
+```
+
+1. Subset the data to a training set and testing set based on the Case variable in the data set.
+
+2. Set the seed to 125 and fit a CART model with the rpart method using all predictor variables and default caret settings.
+
+3. In the final model what would be the final model prediction for cases with the following variable values:
+
+a. TotalIntench2 = 23,000; FiberWidthCh1 = 10; PerimStatusCh1=2
+
+b. TotalIntench2 = 50,000; FiberWidthCh1 = 10;VarIntenCh4 = 100
+
+c. TotalIntench2 = 57,000; FiberWidthCh1 = 8;VarIntenCh4 = 100
+
+d. FiberWidthCh1 = 8;VarIntenCh4 = 100; PerimStatusCh1=2
+
+```{r}
+set.seed(125)
+Data = segmentationOriginal
+inTrain = createDataPartition(Data$Case, p = 3/4)[[1]]
+training = Data[Data$Case == "Train", ]
+testing = Data[Data$Case == "Test", ]
+set.seed(125)
+cFit = train(Class ~., data = training, method = "rpart")
+cFit$finalModel
+#a = PS, WS, PS, not possible to predict
+```
+
+
+
+
+## Question 3
+
+```{r}
+library(pgmm)
+data(olive)
+olive = olive[,-1]
+head(olive)
+```
+
+These data contain information on 572 different Italian olive oils from multiple regions in Italy. Fit a classification tree where Area is the outcome variable. Then predict the value of area for the following data frame using the tree command with all defaults
+
+```{r}
+newdata = as.data.frame(t(colMeans(olive)))
+```
+
+```{r}
+cFit = train(Area ~ ., data = olive, method = "rpart")
+ndat = predict(cFit, newdata)
+ndat
+```
+strange result - factor variable resulting in numeric variable with prediction?
+
+
+## Question 4
+
+Load the South Africa Heart Disease Data and create training and test sets with the following code
+
+```{r}
+library(ElemStatLearn)
+data(SAheart)
+set.seed(8484)
+train = sample(1:dim(SAheart)[1],size=dim(SAheart)[1]/2,replace=F)
+trainSA = SAheart[train,]
+testSA = SAheart[-train,]
+```
+Then set the seed to 13234 and fit a logistic regression model (method="glm", be sure to specify family="binomial") with Coronary Heart Disease (chd) as the outcome and age at onset, current alcohol consumption, obesity levels, cumulative tabacco, type-A behavior, and low density lipoprotein cholesterol as predictors. Calculate the misclassification rate for your model using this function and a prediction on the "response" scale:
+
+```{r}
+library(caret)
+set.seed(13234)
+mFit = train(chd ~ age + alcohol + obesity + tobacco + typea + ldl, data = trainSA, method = "glm", family = "binomial")
+
+
+
+missClass = function(values,prediction){sum(((prediction > 0.5)*1) != values)/length(values)}
+
+predT = predict(mFit, testSA)
+missClass(testSA, predT)/length(predT)
+missClass(trainSA, predT)/length(predT)
+
+confusionMatrix(table(testSA$chd,(predict(mFit,testSA) >0.5)*1))
+confusionMatrix(table(trainSA$chd,(predict(mFit,trainSA) >0.5)*1))
+```
+
+## Question 5
+Load the vowel.train and vowel.test data sets:
+
+```{r}
+library(ElemStatLearn)
+data(vowel.train)
+data(vowel.test)
+vowel.train$y = as.factor(vowel.train$y)
+vowel.test$y = as.factor(vowel.test$y)
+```
+
+
+Set the variable y to be a factor variable in both the training and test set. Then set the seed to 33833. Fit a random forest predictor relating the factor variable y to the remaining variables. Read about variable importance in random forests here: http://www.stat.berkeley.edu/~breiman/RandomForests/cc_home.htm#ooberr The caret package uses by default the Gini importance.
+
+Calculate the variable importance using the varImp function in the caret package. What is the order of variable importance?
+
+[NOTE: Use randomForest() specifically, not caret, as there's been some issues reported with that approach. 11/6/2016]
+
+```{r}
+set.seed(33833)
+rFit = train(y ~ ., data = vowel.train, method = "rf", prox = T)
+rFit
+varImp(rFit)
+```
 
