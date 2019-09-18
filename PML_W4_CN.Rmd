@@ -8,3 +8,556 @@ output: html_document
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(echo = TRUE)
 ```
+
+# Week 4 Classes
+
+- regularized regression
+- combining predictors
+- forecasting
+- unsupervised prediction
+- week 4 quiz
+- course project
+
+
+# Regularized Regression
+
+
+
+
+
+
+
+
+## Basic idea
+
+1. Fit a regression model
+2. Penalize (or shrink) large coefficients
+
+__Pros:__
+
+* Can help with the bias/variance tradeoff!!!
+* Can help with model selection(lasso)
+
+__Cons:__
+
+* May be computationally demanding on large data sets
+* Does not perform as well as random forests and boosting(inkaggle competitions)
+
+
+
+---
+
+## A motivating example
+
+$$Y = \beta_0 + \beta_1 X_1 + \beta_2 X_2 + \epsilon$$
+
+when $X_1$ and $X_2$ are nearly perfectly correlated (co-linear). You can approximate this model by:
+
+$$Y = \beta_0 + (\beta_1 + \beta_2)X_1 + \epsilon$$
+
+The result is:
+
+* You will get a good estimate of $Y$
+* The estimate (of $Y$) will be biased 
+* We may reduce variance in the estimate
+
+---
+
+## Prostate cancer 
+
+```{r prostate}
+library(ElemStatLearn); data(prostate)
+str(prostate)
+```
+
+
+
+---
+
+## Subset selection
+
+<img class="center" src="../../assets/img/prostate.png" height="450">
+
+[Code here](http://www.cbcb.umd.edu/~hcorrada/PracticalML/src/selection.R)
+make a prediction based on large number of predictors in the data set
+
+```{r}
+# regression subset selection in the prostate dataset
+library(ElemStatLearn)
+data(prostate)
+
+covnames <- names(prostate[-(9:10)])
+y <- prostate$lpsa
+x <- prostate[,covnames]
+
+form <- as.formula(paste("lpsa~", paste(covnames, collapse="+"), sep=""))
+summary(lm(form, data=prostate[prostate$train,]))
+
+set.seed(1)
+train.ind <- sample(nrow(prostate), ceiling(nrow(prostate))/2)
+y.test <- prostate$lpsa[-train.ind]
+x.test <- x[-train.ind,]
+
+y <- prostate$lpsa[train.ind]
+x <- x[train.ind,]
+
+p <- length(covnames)
+rss <- list()
+for (i in 1:p) {
+  cat(i)
+  Index <- combn(p,i)
+
+  rss[[i]] <- apply(Index, 2, function(is) {
+    form <- as.formula(paste("y~", paste(covnames[is], collapse="+"), sep=""))
+    isfit <- lm(form, data=x)
+    yhat <- predict(isfit)
+    train.rss <- sum((y - yhat)^2)
+
+    yhat <- predict(isfit, newdata=x.test)
+    test.rss <- sum((y.test - yhat)^2)
+    c(train.rss, test.rss)
+  })
+}
+
+png("Plots/selection-plots-01.png", height=432, width=432, pointsize=12)
+plot(1:p, 1:p, type="n", ylim=range(unlist(rss)), xlim=c(0,p), xlab="number of predictors", ylab="residual sum of squares", main="Prostate cancer data")
+for (i in 1:p) {
+  points(rep(i-0.15, ncol(rss[[i]])), rss[[i]][1, ], col="blue")
+  points(rep(i+0.15, ncol(rss[[i]])), rss[[i]][2, ], col="red")
+}
+minrss <- sapply(rss, function(x) min(x[1,]))
+lines((1:p)-0.15, minrss, col="blue", lwd=1.7)
+minrss <- sapply(rss, function(x) min(x[2,]))
+lines((1:p)+0.15, minrss, col="red", lwd=1.7)
+legend("topright", c("Train", "Test"), col=c("blue", "red"), pch=1)
+dev.off()
+
+##
+# ridge regression on prostate dataset
+library(MASS)
+lambdas <- seq(0,50,len=10)
+M <- length(lambdas)
+train.rss <- rep(0,M)
+test.rss <- rep(0,M)
+betas <- matrix(0,ncol(x),M)
+for(i in 1:M){
+  Formula <-as.formula(paste("y~",paste(covnames,collapse="+"),sep=""))
+  fit1 <- lm.ridge(Formula,data=x,lambda=lambdas[i])
+  betas[,i] <- fit1$coef
+  
+  scaledX <- sweep(as.matrix(x),2,fit1$xm)
+  scaledX <- sweep(scaledX,2,fit1$scale,"/")
+  yhat <- scaledX%*%fit1$coef+fit1$ym
+  train.rss[i] <- sum((y - yhat)^2)
+  
+  scaledX <- sweep(as.matrix(x.test),2,fit1$xm)
+  scaledX <- sweep(scaledX,2,fit1$scale,"/")
+  yhat <- scaledX%*%fit1$coef+fit1$ym
+  test.rss[i] <- sum((y.test - yhat)^2)
+}
+
+png(file="Plots/selection-plots-02.png", width=432, height=432, pointsize=12) 
+plot(lambdas,test.rss,type="l",col="red",lwd=2,ylab="RSS",ylim=range(train.rss,test.rss))
+lines(lambdas,train.rss,col="blue",lwd=2,lty=2)
+best.lambda <- lambdas[which.min(test.rss)]
+abline(v=best.lambda+1/9)
+legend(30,30,c("Train","Test"),col=c("blue","red"),lty=c(2,1))
+dev.off()
+
+
+png(file="Plots/selection-plots-03.png", width=432, height=432, pointsize=8) 
+plot(lambdas,betas[1,],ylim=range(betas),type="n",ylab="Coefficients")
+for(i in 1:ncol(x))
+  lines(lambdas,betas[i,],type="b",lty=i,pch=as.character(i))
+abline(h=0)
+legend("topright",covnames,pch=as.character(1:8))
+dev.off()
+
+
+#######
+# lasso
+install.packages("lars")
+library(lars)
+lasso.fit <- lars(as.matrix(x), y, type="lasso", trace=TRUE)
+
+png(file="Plots/selection-plots-04.png", width=432, height=432, pointsize=8) 
+plot(lasso.fit, breaks=FALSE)
+legend("topleft", covnames, pch=8, lty=1:length(covnames), col=1:length(covnames))
+dev.off()
+
+# this plots the cross validation curve
+png(file="Plots/selection-plots-05.png", width=432, height=432, pointsize=12) 
+lasso.cv <- cv.lars(as.matrix(x), y, K=10, type="lasso", trace=TRUE)
+dev.off()
+
+
+
+
+```
+training set error always goes down with the number of predictors increasing. but the test set data increases only until a treshold, and stays same or decreases(because the model has started to overfit the training set.)
+
+---
+
+## Most common pattern
+
+<img class="center" src="../../assets/img/trainingandtest.png" height="450">
+
+http://www.biostat.jhsph.edu/~ririzarr/Teaching/649/
+
+---
+
+## Model selection approach: split samples
+
+* No method better when data/computation time permits it
+
+* Approach
+  1. Divide data into training/test/validation
+  2. Treat validation as test data, train all competing models on the train data and pick the best one on validation. 
+  3. To appropriately assess performance on new data apply to test set
+  4. You may re-split and reperform steps 1-3
+
+* Two common problems
+  * Limited data
+  * Computational complexity
+  
+http://www.biostat.jhsph.edu/~ririzarr/Teaching/649/
+http://www.cbcb.umd.edu/~hcorrada/PracticalML/
+
+
+---
+
+## Decomposing expected prediction error
+
+Assume $Y_i = f(X_i) + \epsilon_i$
+
+$EPE(\lambda) = E\left[\{Y - \hat{f}_{\lambda}(X)\}^2\right]$
+
+Suppose $\hat{f}_{\lambda}$ is the estimate from the training data and look at a new data point $X = x^*$
+$$E\left[\{Y - \hat{f}_{\lambda}(x^*)\}^2\right] = \sigma^2 + \{E[\hat{f}_{\lambda}(x^*)] - f(x^*)\}^2 + var[\hat{f}_\lambda(x_0)]$$
+
+<center> = Irreducible error + Bias$^2$ + Variance </center>
+
+http://www.biostat.jhsph.edu/~ririzarr/Teaching/649/
+http://www.cbcb.umd.edu/~hcorrada/PracticalML/
+
+---
+
+## Another issue for high-dimensional data
+
+```{r ,dependson="prostate"}
+small = prostate[1:5,]
+lm(lpsa ~ .,data =small)
+```
+you have more predictors than you have samples. so you have a design matrix that cannot be inverted.
+
+http://www.biostat.jhsph.edu/~ririzarr/Teaching/649/
+http://www.cbcb.umd.edu/~hcorrada/PracticalML/
+
+---
+
+## Hard thresholding
+
+* Model $Y = f(X) + \epsilon$
+
+* Set $\hat{f}_{\lambda}(x) = x'\beta$
+
+* Constrain only $\lambda$ coefficients to be nonzero. 
+
+* Selection problem is after chosing $\lambda$ figure out which $p - \lambda$ coefficients to make nonzero
+
+http://www.biostat.jhsph.edu/~ririzarr/Teaching/649/
+http://www.cbcb.umd.edu/~hcorrada/PracticalML/
+
+---
+
+## Regularization for regression
+
+If the $\beta_j$'s are unconstrained:(we don't claim that they have to have any particular form)
+* They can explode
+* And hence are susceptible to very high variance
+
+To control variance, we might regularize/shrink the coefficients. 
+
+$$ PRSS(\beta) = \sum_{j=1}^n (Y_j - \sum_{i=1}^m \beta_{1i} X_{ij})^2 + P(\lambda; \beta)$$
+
+where $PRSS$ is a penalized form of the sum of squares. Things that are commonly looked for
+
+* Penalty reduces complexity
+* Penalty reduces variance
+* Penalty respects structure of the problem
+
+---
+
+## Ridge regression
+
+Solve:
+
+$$ \sum_{i=1}^N \left(y_i - \beta_0 + \sum_{j=1}^p x_{ij}\beta_j \right)^2 + \lambda \sum_{j=1}^p \beta_j^2$$
+
+equivalent to solving
+
+$\sum_{i=1}^N \left(y_i - \beta_0 + \sum_{j=1}^p x_{ij}\beta_j \right)^2$ subject to $\sum_{j=1}^p \beta_j^2 \leq s$ where $s$ is inversely proportional to $\lambda$ 
+
+
+Inclusion of $\lambda$ makes the problem non-singular even if $X^TX$ is not invertible.
+
+http://www.biostat.jhsph.edu/~ririzarr/Teaching/649/
+http://www.cbcb.umd.edu/~hcorrada/PracticalML/
+
+
+---
+
+## Ridge coefficient paths
+
+<img class="center" src="../../assets/img/ridgepath.png" height="450">
+
+http://www.biostat.jhsph.edu/~ririzarr/Teaching/649/
+http://www.cbcb.umd.edu/~hcorrada/PracticalML/
+
+---
+
+## Tuning parameter $\lambda$
+
+* $\lambda$ controls the size of the coefficients
+* $\lambda$ controls the amount of {\bf regularization}
+* As $\lambda \rightarrow 0$ we obtain the least square solution(the standard linear model)
+* As $\lambda \rightarrow \infty$ we have $\hat{\beta}_{\lambda=\infty}^{ridge} = 0$(coefficients go to zero)
+
+
+---
+
+## Lasso 
+
+$\sum_{i=1}^N \left(y_i - \beta_0 + \sum_{j=1}^p x_{ij}\beta_j \right)^2$ subject to $\sum_{j=1}^p |\beta_j| \leq s$ 
+
+also has a lagrangian form 
+
+$$ \sum_{i=1}^N \left(y_i - \beta_0 + \sum_{j=1}^p x_{ij}\beta_j \right)^2 + \lambda \sum_{j=1}^p |\beta_j|$$
+
+For orthonormal design matrices (not the norm!) this has a closed form solution
+
+$$\hat{\beta}_j = sign(\hat{\beta}_j^0)(|\hat{\beta}_j^0 - \gamma)^{+}$$
+ 
+but not in general. 
+
+http://www.biostat.jhsph.edu/~ririzarr/Teaching/649/
+http://www.cbcb.umd.edu/~hcorrada/PracticalML/
+
+
+---
+
+## Notes and further reading
+
+
+* [Hector Corrada Bravo's Practical Machine Learning lecture notes](http://www.cbcb.umd.edu/~hcorrada/PracticalML/)
+* [Hector's penalized regression reading list](http://www.cbcb.umd.edu/~hcorrada/AMSC689.html#readings)
+* [Elements of Statistical Learning](http://statweb.stanford.edu/~tibs/ElemStatLearn/)
+* In `caret` methods are:
+  * `ridge`
+  * `lasso`
+  * `relaxo`
+  
+  
+  
+  
+  
+# Combining Predictors
+
+
+
+
+
+
+
+
+
+## Key ideas
+
+* You can combine classifiers by averaging/voting(ex: combining boosting classifier with a random forest in a linear regression model)
+* Combining classifiers improves accuracy
+* Combining classifiers reduces interpretability
+* Boosting, bagging, and random forests are variants on this theme
+
+---
+
+## Netflix prize
+
+BellKor = Combination of 107 predictors 
+
+<img class=center src=../../assets/img/08_PredictionAndMachineLearning/netflix.png height=450>
+
+[http://www.netflixprize.com//leaderboard](http://www.netflixprize.com//leaderboard)
+
+---
+
+## Heritage health prize - Progress Prize 1
+
+<img class=center src=../../assets/img/08_PredictionAndMachineLearning/makers.png height=200>
+[Market Makers](https://kaggle2.blob.core.windows.net/wiki-files/327/e4cd1d25-eca9-49ca-9593-b254a773fe03/Market%20Makers%20-%20Milestone%201%20Description%20V2%201.pdf)
+
+<img class=center src=../../assets/img/08_PredictionAndMachineLearning/mestrom.png height=200>
+
+[Mestrom](https://kaggle2.blob.core.windows.net/wiki-files/327/09ccf652-8c1c-4a3d-b979-ce2369c985e4/Willem%20Mestrom%20-%20Milestone%201%20Description%20V2%202.pdf)
+
+
+---
+
+## Basic intuition - majority vote
+
+Suppose we have 5 completely independent classifiers
+
+If accuracy is 70% for each:
+  * $10\times(0.7)^3(0.3)^2 + 5\times(0.7)^4(0.3)^2 + (0.7)^5$
+  * 83.7% majority vote accuracy
+
+With 101 independent classifiers
+  * 99.9% majority vote accuracy
+  
+
+---
+
+## Approaches for combining classifiers
+
+1. Bagging, boosting, random forests
+  * Usually combine similar classifiers
+2. Combining different classifiers
+  * Model stacking
+  * Model ensembling
+
+---
+
+## Example with Wage data
+
+__Create training, test and validation sets__
+
+```{r wage}
+library(ISLR); data(Wage); library(ggplot2); library(caret);
+Wage <- subset(Wage,select=-c(logwage))
+# Create a building data set and validation set
+inBuild <- createDataPartition(y=Wage$wage,
+                              p=0.7, list=FALSE)
+validation <- Wage[-inBuild,]; buildData <- Wage[inBuild,]
+inTrain <- createDataPartition(y=buildData$wage,
+                              p=0.7, list=FALSE)
+training <- buildData[inTrain,]; testing <- buildData[-inTrain,]
+```
+
+
+---
+
+## Wage data sets
+
+__Create training, test and validation sets__
+
+```{r, dependson="wage"}
+dim(training)
+dim(testing)
+dim(validation)
+```
+
+
+---
+
+## Build two different models
+
+```{r modFit,dependson="wage"}
+mod1 <- train(wage ~.,method="glm",data=training)
+mod2 <- train(wage ~.,method="rf",
+              data=training, 
+              trControl = trainControl(method="cv"),number=3)
+```
+
+
+---
+
+## Predict on the testing set 
+
+```{r predict,dependson="modFit",fig.height=4,fig.width=6}
+pred1 <- predict(mod1,testing); pred2 <- predict(mod2,testing)
+qplot(pred1,pred2,colour=wage,data=testing)
+```
+they are not exactly the same, and there are ares where both models cannot predict surely
+
+---
+
+## Fit a model that combines predictors
+
+```{r combine,dependson="predict"}
+predDF <- data.frame(pred1,pred2,wage=testing$wage)#make a data frame with all predictors from both models
+combModFit <- train(wage ~.,method="gam",data=predDF)
+#create a model with outcome wage and predictors from the 2 models
+combPred <- predict(combModFit,predDF)
+# predict from the combined data set.
+```
+
+
+---
+
+## Testing errors
+
+```{r ,dependson="combine"}
+sqrt(sum((pred1-testing$wage)^2))
+sqrt(sum((pred2-testing$wage)^2))
+sqrt(sum((combPred-testing$wage)^2))# lower error with combined predictor
+```
+
+
+---
+
+## Predict on validation data set
+
+```{r validation,dependson="combine"}
+pred1V <- predict(mod1,validation); pred2V <- predict(mod2,validation)
+predVDF <- data.frame(pred1=pred1V,pred2=pred2V) # data frame that contains those predictions
+combPredV <- predict(combModFit,predVDF)
+#use the combined model on the predictions on the validation set.
+```
+
+
+---
+
+## Evaluate on validation
+
+```{r ,dependson="validation"}
+sqrt(sum((pred1V-validation$wage)^2))
+sqrt(sum((pred2V-validation$wage)^2))
+sqrt(sum((combPredV-validation$wage)^2))
+```
+
+
+
+---
+
+## Notes and further resources
+
+* Even simple blending can be useful
+* Typical model for binary/multiclass data
+  * Build an odd number of models
+  * Predict with each model
+  * Predict the class by majority vote
+* This can get dramatically more complicated
+  * Simple blending in caret: [caretEnsemble](https://github.com/zachmayer/caretEnsemble) (use at your own risk!)
+  * Wikipedia [ensemble learning](http://en.wikipedia.org/wiki/Ensemble_learning)
+
+---
+
+## Recall - scalability matters
+
+<img class=center src=../../assets/img/08_PredictionAndMachineLearning/netflixno.png height=250>
+</br></br></br>
+
+[http://www.techdirt.com/blog/innovation/articles/20120409/03412518422/](http://www.techdirt.com/blog/innovation/articles/20120409/03412518422/)
+
+[http://techblog.netflix.com/2012/04/netflix-recommendations-beyond-5-stars.html](http://techblog.netflix.com/2012/04/netflix-recommendations-beyond-5-stars.html)
+
+
+
+
+
+
+
+
+
+# Forecasting
+
+
