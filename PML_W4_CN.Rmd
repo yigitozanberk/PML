@@ -953,32 +953,38 @@ Set the seed to 62433 and predict *diagnosis* with all the other variables using
 library(randomForest)
 library(gbm)
 set.seed(62433)
-ldaFit = train(diagnosis ~ ., method = "lda", data = training)
-rfFit = train(diagnosis ~., method = "rf", data = training)
-gbmFit = train(diagnosis ~., method = "gbm", data = training, verbose = F)
-pred1 = predict(ldaFit, data = training)
-pred2 = predict(rfFit, data = training)
-pred3 = predict(gbmFit, data = training)
-predDF = data.frame(pred1, pred2, pred3, training$diagnosis)
-combrfFit = train(training.diagnosis ~., method = "rf", data = predDF)
-combPred = predict(combrfFit, data = predDF)
-
-
-
-confusionMatrix(table(testing$diagnosis, predict(ldaFit, newdata = testing)))
-confusionMatrix(table(testing$diagnosis, predict(rfFit, newdata = testing)))
-confusionMatrix(table(testing$diagnosis, predict(gbmFit, newdata = testing)))
-
-
+modelFit_rf<-train(diagnosis~., method="rf", data=training)
+modelFit_gbm<-train(diagnosis~., method="gbm", data=training,verbose=FALSE)
+modelFit_lda<-train(diagnosis~., method="lda", data=training)
 ```
 
 ```{r}
-pred1V = predict(ldaFit, newdata = testing)
-pred2V = predict(rfFit, newdata = testing)
-pred3V = predict(gbmFit, newdata = testing)
+predict_rf<-predict(modelFit_rf,newdata=testing)
+predict_gbm<-predict(modelFit_gbm,newdata=testing)
+predict_lda<-predict(modelFit_lda,newdata=testing)
+confusionMatrix(predict_rf, testing$diagnosis)$overall['Accuracy']
+```
 
-predDFV = data.frame(pred1 = pred1V, pred2= pred2V, pred3 = pred3V, training.diagnosis = testing$diagnosis)
-confusionMatrix(table(testing$diagnosis, predict(combrfFit, newdata = predDFV)))
+
+```{r}
+confusionMatrix(predict_gbm, testing$diagnosis)$overall['Accuracy']
+```
+
+```{r}
+confusionMatrix(predict_lda, testing$diagnosis)$overall['Accuracy']
+```
+
+```{r}
+#create a new dataframe with the predictions
+predDF <- data.frame(predict_rf, predict_gbm, predict_lda, diagnosis = testing$diagnosis)
+#create a new model using the new data frame and rf method
+combModFit <- train(diagnosis ~.,method="rf",data=predDF)
+```
+
+```{r}
+#predict values and calculate the confusion matrix to check the accuracy
+combPred <- predict(combModFit, predDF)
+confusionMatrix(combPred, testing$diagnosis)$overall['Accuracy']
 ```
 
 stacking gives accuracy of 80, better than all other three models.
@@ -1035,8 +1041,61 @@ training = dat[year(dat$date) < 2012,]
 testing = dat[(year(dat$date)) > 2011,]
 
 tstrain = ts(training$visitsTumblr)
+tstest = ts(testing$visitsTumblr)
 ```
 
 Fit a model using the bats() function in the forecast package to the training time series. Then forecast this model for the remaining time points. For how many of the testing points is the true value within the 95% prediction interval bounds?
 
+```{r}
+tFit = bats(tstrain)
+fcast = forecast(tFit,h=nrow(testing) )
+fcast
+```
+
+```{r}
+plot(fcast)
+```
+
+```{r}
+fcast_lower95 = fcast$lower[,2]
+fcast_upper95 = fcast$upper[,2]
+table( (testing$visitsTumblr>fcast_lower95) & (testing$visitsTumblr<fcast_upper95) )
+```
+
+```{r}
+226/235
+```
+
+
+## Question 5
+
+
+Load the concrete data with the commands:
+
+
+```{r}
+set.seed(3523)
+library(caret)
+
+library(AppliedPredictiveModeling)
+
+data(concrete)
+
+inTrain = createDataPartition(concrete$CompressiveStrength, p = 3/4)[[1]]
+
+training = concrete[ inTrain,]
+
+testing = concrete[-inTrain,]
+```
+
+
+Set the seed to 325 and fit a support vector machine using the e1071 package to predict Compressive Strength using the default settings. Predict on the testing set. What is the RMSE?
+
+```{r}
+library(e1071)
+set.seed(325)
+modFit<-svm(CompressiveStrength~., data=training)
+predict_svm<-predict(modFit, testing)
+accuracy(predict_svm, testing$CompressiveStrength)
+```
 
